@@ -69,8 +69,14 @@ if (filesConfig === undefined) {
         previewMaxHeight: {UPLOAD_THUMB_HEIGHT},
         autoUpload: {PHP.cfg.files.autoupload},
         sequential: {PHP.cfg.files.sequential},
-        'x':    '{UPLOAD_X}'
+        'x': '{UPLOAD_X}'
     };
+
+    <!-- IF {PHP.cfg.files.image_resize} == 1 AND {PHP.cfg.files.imageResizeInBrowser} == 1 AND {PHP.cfg.files.image_maxwidth} > 0 AND {PHP.cfg.files.image_maxheight} > 0 -->
+    filesConfig.imageResize = true;
+    filesConfig.imageMaxWidth = {PHP.cfg.files.image_maxwidth};
+    filesConfig.imageMaxHeight = {PHP.cfg.files.image_maxheight};
+    <!-- ENDIF -->
 }
 filesConfig.{UPLOAD_ID} = {
     source: '{UPLOAD_SOURCE}',

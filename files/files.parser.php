@@ -15,6 +15,9 @@ Hooks=parser.last
  *
  * @todo дописать
  */
+
+use cot\modules\files\models\File;
+
 defined('COT_CODE') or die('Wrong URL.');
 
 require_once cot_incfile('files', 'module');
@@ -25,7 +28,7 @@ if (!function_exists('files_thumb_bbcode')) {
      * Replaces att_thumb bbcode with the thumbnail image alone
      *
      * @param array $m
-     * @global files_model_File[] $files_item_cache
+     * @global File[] $files_item_cache
      * @return string
      */
     function files_thumb_bbcode($m)
@@ -38,16 +41,17 @@ if (!function_exists('files_thumb_bbcode')) {
 			return $m[0].'err';
 		}
 		$params['id'] = (int) $params['id'];
-		$src = cot_files_thumb($params['id'], $params['width'], $params['height'], $params['frame']);
+		$src = cot_filesThumbnailUrl($params['id'], $params['width'], $params['height'], $params['frame']);
 		if (!$src) {
 			return $m[0].'err2';
 		}
 		$html = '<img src="'.$src.'"';
 		if (empty($params['alt'])) {
 			if (!isset($files_item_cache[$params['id']])) {
-                $row = files_model_File::getById($params['id']);
-				if (!$row || !$row->file_img) return $m[0].'err';
-
+                $row = File::getById($params['id']);
+				if (!$row || !$row->is_img) {
+                    return $m[0].'err';
+                }
 				$files_item_cache[$params['id']] = $row;
 			}
 			$params['alt'] = $files_item_cache[$params['id']]->file_title;
@@ -64,7 +68,7 @@ if (!function_exists('files_thumb_bbcode')) {
      * Replaces att_image bbcode with a thumbnail wrapped with a link to full image
      *
      * @param array $m
-     * @global files_model_File[] $files_item_cache
+     * @global File[] $files_item_cache
      * @return string
      */
 	function files_image_bbcode($m)
@@ -79,24 +83,21 @@ if (!function_exists('files_thumb_bbcode')) {
 		$params['id'] = (int) $params['id'];
 
 		if (!isset($files_item_cache[$params['id']])){
-            $row = files_model_File::getById($params['id']);
-            if (!$row || !$row->file_img) return $m[0].'err';
-
+            $row = File::getById($params['id']);
+            if (!$row || !$row->is_img) {
+                return $m[0].'err';
+            }
 			$files_item_cache[$params['id']] = $row;
-
         } else {
 			$row = $files_item_cache[$params['id']];
 		}
 
 		$img = files_thumb_bbcode($m);
 
-        $path = Cot::$cfg['files']['folder']. '/' . $row->file_path;
-        $url  = Cot::$cfg['mainurl'].'/'.$path;
+        $path = Cot::$cfg['files']['folder'] . '/' . $row->fullName;
+        $url  = Cot::$cfg['mainurl'] . '/' . $path;
 
-		$html = '<a href="'.$url.'" title="' . htmlspecialchars($row->file_title) . '" rel="att_image_preview">' .
-            $img . '</a>';
-
-		return $html;
+        return '<a href="'.$url.'" title="' . htmlspecialchars($row->title) . '" rel="att_image_preview">' . $img . '</a>';
 	}
 
     /**
@@ -112,7 +113,7 @@ if (!function_exists('files_thumb_bbcode')) {
             return $m[0].'err';
         }
         $params['f'] = (int) $params['f'];
-        $folder = files_model_Folder::getById($params['f']);
+        $folder = files_models_Folder::getById($params['f']);
         if(!$folder) return $m[0].'err - NotFound';
         $source = $folder->user_id > 0 ? 'pfs' : 'sfs';
 
@@ -128,7 +129,7 @@ if (!function_exists('files_thumb_bbcode')) {
             }
         }
 
-        $html = cot_files_gallery($source, $folder->ff_id, '', $tpl, 0, $order);
+        $html = cot_filesGallery($source, $folder->ff_id, '', $tpl, 0, $order);
         if (!$html) return $m[0].'err2';
 
         return $html;

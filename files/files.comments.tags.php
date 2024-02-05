@@ -10,9 +10,8 @@ Tags=comments.tpl:{COMMENTS_FORM_PFS},{COMMENTS_FORM_SFS}
  * PFS link on page.add
  *
  * @package Files
- * @author Cotonti Team
- * @copyright Copyright (c) Cotonti Team 2014
- * @license BSD
+ * @author Kalnov Alexey <kalnovalexey@yandex.ru>
+ * @copyright (c) Lily Software https://lily-software.com
  */
 defined('COT_CODE') or die('Wrong URL.');
 
@@ -32,8 +31,8 @@ if(cot_auth('files', 'a', 'W')){
     }
 
     $t->assign(array(
-        'COMMENTS_FORM_PFS' => cot_files_buildPfs(Cot::$usr['id'], $form_name, $input_name, Cot::$L['Mypfs'], Cot::$sys['parser']),
-        'COMMENTS_FORM_SFS' => (cot_auth('files', 'a', 'A')) ? cot_files_buildPfs(0, $form_name, $input_name,
+        'COMMENTS_FORM_PFS' => cot_filesBuildPfs(Cot::$usr['id'], $form_name, $input_name, Cot::$L['Mypfs'], Cot::$sys['parser']),
+        'COMMENTS_FORM_SFS' => (cot_auth('files', 'a', 'A')) ? cot_filesBuildPfs(0, $form_name, $input_name,
                     Cot::$L['SFS'], Cot::$sys['parser']) : ''
     ));
 }

@@ -5,10 +5,10 @@ Code=files
 Name=Files
 Description=Personal File Space and attach files to posts and pages
 Category=files-media
-Version=1.0.8
-Date=Dec 27, 2022
-Author=Cotonti Team, Kalnov Alexey <kalnovalexey@yandex.ru>
-Copyright=(c) Cotonti Team, 2014-2022 Lily Software https://lily-software.com (ex. Portal30 Studio)
+Version=2.0.0
+Date=2023-10-21
+Author=Cotonti Team, Kalnov Alexey https://github.com/Alex300
+Copyright=(c) Cotonti Team, 2014-2023 Lily Software https://lily-software.com
 Notes=DO NOT FORGET to create a writable folder for the files
 Auth_guests=R
 Lock_guests=12345A
@@ -18,10 +18,10 @@ Recommends_modules=page,users
 
 [BEGIN_COT_EXT_CONFIG]
 folder=01:string::datas/files:Directory for files
-prefix=02:string::file_:File prefix
-exts=03:text::avif,bmp,gd2,gd,gif,jpg,jpeg,png,tga,tpic,wbmp,webp,xbm,zip,rar,7z,gz,bz2,pdf,djvu,mp3,ogg,wma,avi,divx,mpg,mpeg,swf,txt,doc,docx,xls,xlsx:Allowed extensions (comma separated, no dots and spaces)
-filecheck=04:radio::1:
-nomimepass=05:radio::1:
+prefix=02:string::file-:File prefix
+checkAllowedType=03:radio::1:
+exts=04:text::avif,bmp,gif,jpg,jpeg,heic,heif,png,tga,tpic,wbmp,webp,xbm,zip,rar,7z,gz,bz2,pdf,djvu,mp3,ogg,wma,avi,divx,mpg,mpeg,swf,txt,doc,docx,xls,xlsx:Allowed extensions (comma separated, no dots and spaces)
+fixExtensionsByMime=05:radio::1:Fix files extensions by mime type
 maxFoldersPerPage=07:string::15:
 pfs_winclose=08:radio::0:
 
@@ -33,21 +33,20 @@ chunkSize=13:string::2000000:Chunk size (in bytes) (0 - Disable chunked file upl
 
 img_separator=20:separator:::
 
-image_convert=21:radio::0:Convert all images to JPG on upload
-image_resize=22:radio::0:auto:Resize uploaded images
-image_maxwidth=23:string::3840:Image max width for resize
-image_maxheight=24:string::2160:Image max height for resize
-quality=25:string::85:JPEG quality in %
+image_convert=21:radio::1:Convert images to JPG on upload
+image_to_convert=22:text::avif,bmp,heic,heif,tga,tpic,wbmp,xbm:Image extensions/types to convert to jpeg, if the option above is enabled. If empty, all images will be converted. (comma separated, no dots and spaces)
+image_resize=23:radio::0:Resize uploading images
+image_maxwidth=24:string::3840:Image max width for resize
+image_maxheight=25:string::2160:Image max height for resize
+imageResizeInBrowser=26:radio::1:Resize uploading images in browser if possible
+quality=27:string::85:JPEG quality in %
 
 th_separator=30:separator:::
 
 thumbs=31:radio::1:Display image thumbnails
 thumb_width=32:string::160:Default thumbnail width
 thumb_height=33:string::160:Default thumbnail height
-thumb_framing=34:select:height,width,auto,border_auto,crop:auto:Default thumbnail framing mode
-thumb_border=36:string::1:
-thumb_bordercolor=37:string::999999:
-thumb_bgcolor=38:string::FFFFFF:
+thumb_framing=34:select:height,width,inset,outbound:inset:Default thumbnail framing mode
 upscale=39:radio::0:Upscale images smaller than thumb size
 
 wm_separator=40:separator:::
@@ -60,28 +59,32 @@ av_separator=50:separator:::
 
 avatar_width=51:string::160:Default avatar width
 avatar_height=52:string::160:Default avatar height
-avatar_framing=53:select:height,width,auto,border_auto,crop:crop:Default avatar framing mode
+avatar_framing=53:select:height,width,inset,outbound:outbound:Default avatar framing mode
 [END_COT_EXT_CONFIG]
 ==================== */
 
 /**
+ * @todo test extrafields
+ * @todo min PHP version 7.4
+ *
  * module Files for Cotonti Siena
  *
  * @package Files
  *
- * @author Cotonti Team
  * @author Kalnov Alexey <kalnovalexey@yandex.ru>
- * @copyright (c) Cotonti Team
- * @copyright (c) 2014-2021 Lily Software https://lily-software.com (ex. Portal30 Studio)
+ * @copyright (c) 2014-2023 Lily Software https://lily-software.com (ex. Portal30 Studio)
  *
  * В настройках все размеры указываются в байтах
  * в ограничениях 0 - не ограничено, -1 - запрещено
  *
  * Файлы по папкам делятся так:
- * file_source = 'pfs' / 'sfs'
- * file_item   = id папки
- * user_id     = id пользователя реально добавившего файл или 0 для sfs
+ * source     = 'pfs' / 'sfs'
+ * source_id  = id папки
+ * user_id    = id пользователя реально добавившего файл или 0 для sfs
  *
  * В свой pfs добавлять файлы пользователь может только сам
+ *
+ * Flysystem adapter для Яндекс.Диск
+ * https://github.com/jack-theripper/yandex-disk-flysystem
  */
 defined('COT_CODE') or die('Wrong URL');

@@ -1,4 +1,8 @@
 <?php
+
+use cot\modules\files\models\File;
+use cot\modules\files\services\FileService;
+
 defined('COT_CODE') or die('Wrong URL.');
 
 /**
@@ -23,9 +27,9 @@ class PfsController
 
         $perPage = Cot::$cfg['files']['maxFoldersPerPage'];
 
-        list($pgf, $df) = cot_import_pagenav('df', $perPage);   // page number folders
+        [$pgf, $df] = cot_import_pagenav('df', $perPage);   // page number folders
 
-        list($usr['auth_read'], $usr['auth_write'], $usr['isadmin']) = cot_auth('files', 'a');
+        [$usr['auth_read'], $usr['auth_write'], $usr['isadmin']] = cot_auth('files', 'a');
         cot_block($usr['auth_read']);   // Это бекэнд часть для пользователя. Может надо блокировать, если нет прав на запись????
 
         $c1 = cot_import('c1','G','ALP');					// form name
@@ -62,13 +66,13 @@ class PfsController
         $onPageFoldersCount = 0;
 
         if ($f > 0) {
-            $folder = files_model_Folder::getById($f);
+            $folder = files_models_Folder::getById($f);
             if (!$folder) cot_die_message(404);
             $uid = (int)$folder->user_id;
 
         } else {
-            $folders = files_model_Folder::findByCondition(array(array('user_id', $uid)), $perPage, $df, array(array('ff_title', 'ASC')));
-            $folders_count = files_model_Folder::count(array(array('user_id', $uid)));
+            $folders = files_models_Folder::findByCondition(array(array('user_id', $uid)), $perPage, $df, array(array('ff_title', 'ASC')));
+            $folders_count = files_models_Folder::count(array(array('user_id', $uid)));
             $onPageFoldersCount = !empty($folders) ? count($folders) : 0;
         }
 
@@ -80,7 +84,7 @@ class PfsController
             cot_block(Cot::$usr['isadmin']);
         }
 
-        $limits = cot_files_getLimits($uid);
+        $limits = cot_filesGetLimits($uid);
         // Ограничения на загрузку файлов через POST
         if (Cot::$cfg['files']['chunkSize'] == 0){
             $limits['size_maxfile']  = min((int)$limits['size_maxfile'], cot_get_uploadmax() * 1024);
@@ -159,7 +163,7 @@ class PfsController
         }
         foreach($allowedExts as $ext) {
             $t->assign(array(
-                'ALLOWED_ROW_ICON_URL' => files_model_File::typeIcon($ext),
+                'ALLOWED_ROW_ICON_URL' => FileService::typeIcon($ext),
                 'ALLOWED_ROW_EXT' => $ext,
                 'ALLOWED_ROW_DESC' => !empty($descriptions[$ext]) ? $descriptions[$ext] : $ext
             ));
@@ -168,13 +172,15 @@ class PfsController
 
 
         $source = $isSFS ? 'sfs' : 'pfs';
-        if($f == 0) {
-            $countCond = array(
-                array('file_source', $source),
-                array('file_item', $f),
-            );
-            if(!$isSFS) $countCond[] = array('user_id', $uid);
-            $files_count = files_model_File::count($countCond);
+        if ($f == 0) {
+            $countCond = [
+                ['source', $source],
+                ['source_id', $f],
+            ];
+            if (!$isSFS) {
+                $countCond[] = ['user_id', $uid];
+            }
+            $files_count = File::count($countCond);
 
         } else {
             $files_count = $folder->ff_count;
@@ -185,7 +191,7 @@ class PfsController
             'FOLDERS_COUNT_RAW' => $folders_count,
             'FOLDERS_ONPAGE_COUNT' => cot_declension($onPageFoldersCount, $Ls['Folders']),
             'FOLDERS_ONPAGE_COUNT_RAW' => $onPageFoldersCount,
-            'FILES_WIDGET' => cot_files_filebox($source, $f, '', 'all', -1, 'files.filebox', $standalone, $uid),
+            'FILES_WIDGET' => cot_filesFileBox($source, $f, '', 'all', -1, 'files.filebox', $standalone, $uid),
             'IS_SITE_FILE_SPACE' => $isSFS,
             'PFS_FILES_COUNT' => cot_declension($files_count, $Ls['Files']),
             'PFS_FILES_COUNT_RAW' => $files_count,
@@ -206,10 +212,10 @@ class PfsController
                     $folderIds[] = $folderRow->ff_id;
                 }
 
-                $sql = Cot::$db->query("SELECT file_item as ff_id, COUNT(*) as items_count, SUM(file_size) as size
-                    FROM $db_files WHERE file_source='{$source}' AND file_item IN (".implode(',', $folderIds).")
-                    GROUP BY file_item");
-                while ($pfs_filesinfo = $sql->fetch()){
+                $sql = Cot::$db->query("SELECT source_id as ff_id, COUNT(*) as items_count, SUM(size) as size
+                    FROM $db_files WHERE source = '{$source}' AND source_id IN (" . implode(',', $folderIds) . ")
+                    GROUP BY source_id");
+                while ($pfs_filesinfo = $sql->fetch()) {
                     $ff_filessize[$pfs_filesinfo['ff_id']]  = $pfs_filesinfo['size'];
                     $onPageFoldersFilesCount += $pfs_filesinfo['items_count'];
                 }
@@ -219,7 +225,7 @@ class PfsController
 
                 foreach($folders as $folderRow) {
                     $itemsSize = !empty($ff_filessize[$folderRow->ff_id]) ? (int) $ff_filessize[$folderRow->ff_id] : 0;
-                    $t->assign(files_model_Folder::generateTags($folderRow, 'FOLDER_ROW_', $urlParams));
+                    $t->assign(files_models_Folder::generateTags($folderRow, 'FOLDER_ROW_', $urlParams));
                     $t->assign(array(
                         'FOLDER_ROW_NUM' => $i,
                         'FOLDER_ROW_ITEMS_SIZE' => cot_build_filesize($itemsSize),
@@ -267,7 +273,7 @@ class PfsController
             if($pgf > 1) Cot::$out['subtitle'] .= " (".Cot::$L['Page']." {$pgf})";
 
         } else {
-            if ($folder) $t->assign(files_model_Folder::generateTags($folder, 'FOLDER_', $urlParams));
+            if ($folder) $t->assign(files_models_Folder::generateTags($folder, 'FOLDER_', $urlParams));
         }
 
         if ($standalone) {
@@ -341,7 +347,7 @@ class PfsController
     {
         global $usr, $Ls, $cot_extensions, $outHeaderFooter;
 
-        list(Cot::$usr['auth_read'], Cot::$usr['auth_write'], Cot::$usr['isadmin']) = cot_auth('files', 'a');
+        [Cot::$usr['auth_read'], Cot::$usr['auth_write'], Cot::$usr['isadmin']] = cot_auth('files', 'a');
         cot_block(Cot::$usr['auth_write']);
 
         $f = cot_import('f', 'G', 'INT');           // folder id
@@ -361,7 +367,7 @@ class PfsController
         $act = cot_import('act', 'P', 'ALP');
         if (!$f) {
             $f = 0;
-            $folder = new files_model_Folder();
+            $folder = new files_models_Folder();
             if($uid === null) $uid = Cot::$usr['id'];
             if($uid === 0) {
                 $isSFS = true;
@@ -371,7 +377,7 @@ class PfsController
             }
 
         } else {
-            $folder = files_model_Folder::getById($f);
+            $folder = files_models_Folder::getById($f);
             if(!$folder) cot_die_message(404, TRUE);
             $folderData = $folder->toArray();
             $uid = (int)$folder->user_id;
@@ -414,7 +420,7 @@ class PfsController
             }
         }
 
-        $limits = cot_files_getLimits($uid);
+        $limits = cot_filesGetLimits($uid);
 
         if ($isSFS){
             $tmp = $urlParams;
@@ -478,7 +484,7 @@ class PfsController
             cot_inputbox('hidden', 'act', 'save');
 
         if($f > 0) {
-            $t->assign(files_model_Folder::generateTags($folder, 'FOLDER_', $urlParams));
+            $t->assign(files_models_Folder::generateTags($folder, 'FOLDER_', $urlParams));
 
         } else {
             $folder->ff_public = 1;
@@ -488,16 +494,21 @@ class PfsController
         $folderFormAlbum = cot_checkbox($folder->ff_album, 'ff_album',  Cot::$L['files_isgallery']);
 
         // Если в папке есть файлы не изображения, то это не альбом
-        if($f > 0 && files_model_File::count(array(
-                            array('file_source', $source), array('file_item', $f), array('file_img', 0))
-                    ) > 0) {
+        if (
+            $f > 0
+            && File::count([['source', $source], ['source_id', $f], ['is_img', 0]]) > 0
+        ) {
             $folderFormAlbum = '';
             $folderFormHidden .= cot_inputbox('hidden', 'ff_album', 0);
             $folder->ff_album = 0;
         }
 
-        if(!empty($c1)) $folderFormHidden .= cot_inputbox('hidden', 'c1', $c1);
-        if(!empty($c2)) $folderFormHidden .= cot_inputbox('hidden', 'c2', $c2);
+        if (!empty($c1)) {
+            $folderFormHidden .= cot_inputbox('hidden', 'c1', $c1);
+        }
+        if (!empty($c2)) {
+            $folderFormHidden .= cot_inputbox('hidden', 'c2', $c2);
+        }
 
         $t->assign(array(
             'FOLDER_FORM_URL'    => cot_url('files', array('m' => 'pfs', 'a' => 'editFolder')),
@@ -533,7 +544,7 @@ class PfsController
         }
         foreach($allowedExts as $ext) {
             $t->assign(array(
-                'ALLOWED_ROW_ICON_URL' => files_model_File::typeIcon($ext),
+                'ALLOWED_ROW_ICON_URL' => FileService::typeIcon($ext),
                 'ALLOWED_ROW_EXT' => $ext,
                 'ALLOWED_ROW_DESC' => !empty($descriptions[$ext]) ? $descriptions[$ext] : $ext
             ));
@@ -545,7 +556,7 @@ class PfsController
             'PFS_FILES_COUNT_RAW' => $folder->ff_count,
 
             'FILES_WIDGET' => ($folder->ff_id > 0 ) ?
-                    cot_files_filebox($source, $f, '', 'all', -1, 'files.filebox', $standalone) : '',
+                    cot_filesFileBox($source, $f, '', 'all', -1, 'files.filebox', $standalone) : '',
             'IS_SITE_FILE_SPACE' => $isSFS,
             'PAGE_TITLE' => Cot::$out['subtitle'] =  $title,
             'BREADCRUMBS' => cot_breadcrumbs($crumbs, !$standalone && Cot::$cfg['homebreadcrumb']),
@@ -621,12 +632,12 @@ class PfsController
     public function deleteFolderAction(){
         global $usr;
 
-        list($usr['auth_read'], $usr['auth_write'], $usr['isadmin']) = cot_auth('files', 'a');
+        [$usr['auth_read'], $usr['auth_write'], $usr['isadmin']] = cot_auth('files', 'a');
         cot_block($usr['auth_write']);
 
         $f = cot_import('f', 'G', 'INT');           // folder id
         if(!$f) cot_die_message(404);
-        $folder = files_model_Folder::getById($f);
+        $folder = files_models_Folder::getById($f);
         if(!$folder) cot_die_message(404);
         $uid = (int)$folder->user_id;
 

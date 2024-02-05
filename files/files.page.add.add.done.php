@@ -11,10 +11,18 @@ Hooks=page.add.add.done
  * @package Files
  * @author Cotonti Team
  */
+
+use cot\modules\files\services\FileService;
+
+ /**
+ * @var int $id
+ */
+
 defined('COT_CODE') or die('Wrong URL');
 
 if (cot_auth('files', 'a', 'W')) {
-    if ($id) {
-        cot_files_linkFiles('page', $id);
+    $filesItemId = (int) $id;
+    if ($filesItemId) {
+        FileService::linkFiles('page', $filesItemId);
     }
 }

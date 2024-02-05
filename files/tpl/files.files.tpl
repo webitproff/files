@@ -9,7 +9,7 @@
     <meta charset="utf-8">
     <title>{PHP.L.files_attachments}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {PHP|cot_files_loadBootstrap()}
+    {PHP|cot_filesLoadBootstrap}
     {PHP.out.head_head}
     <!-- Generic page styles -->
     <link rel="stylesheet" href="{PHP.cfg.modules_dir}/files/tpl/widget.css?{PHP.cot_modules.files.version}">
@@ -75,28 +75,36 @@
 <script src="lib/bootstrap/js/bootstrap.min.js?{PHP.cot_modules.files.version}"></script>
 <!-- ENDIF -->
 {PHP.out.footer_rc}
+
 <!-- Cotonti config -->
 <script type="text/javascript">
-    if (filesConfig === undefined) {
-        var filesConfig = {
-            exts: $.map('{UPLOAD_EXTS}'.split(','), $.trim),
-            //accept: '{UPLOAD_ACCEPT}',
-            maxsize: {UPLOAD_MAXSIZE},
-            previewMaxWidth: {UPLOAD_THUMB_WIDTH},
-            previewMaxHeight: {UPLOAD_THUMB_HEIGHT},
-            autoUpload: {PHP.cfg.files.autoupload},
-            sequential: {PHP.cfg.files.sequential},
-            'x':    '{UPLOAD_X}'
-        };
-    }
-    filesConfig.{UPLOAD_ID} = {
-        source: '{UPLOAD_SOURCE}',
-        item:   {UPLOAD_ITEM},
-        field:  '{UPLOAD_FIELD}',
-        limit:  {UPLOAD_LIMIT},
-        chunk:  {UPLOAD_CHUNK},
-        param:  '{UPLOAD_PARAM}'
+if (filesConfig === undefined) {
+    var filesConfig = {
+        exts: $.map('{UPLOAD_EXTS}'.split(','), $.trim),
+        //accept: '{UPLOAD_ACCEPT}',
+        maxsize: {UPLOAD_MAXSIZE},
+        previewMaxWidth: {UPLOAD_THUMB_WIDTH},
+        previewMaxHeight: {UPLOAD_THUMB_HEIGHT},
+        autoUpload: {PHP.cfg.files.autoupload},
+        sequential: {PHP.cfg.files.sequential},
+        'x':    '{UPLOAD_X}'
     };
+
+    <!-- IF {PHP.cfg.files.image_resize} == 1 AND {PHP.cfg.files.imageResizeInBrowser} == 1 AND {PHP.cfg.files.image_maxwidth} > 0 AND {PHP.cfg.files.image_maxheight} > 0 -->
+    filesConfig.imageResize = true;
+    filesConfig.imageMaxWidth = {PHP.cfg.files.image_maxwidth};
+    filesConfig.imageMaxHeight = {PHP.cfg.files.image_maxheight};
+    <!-- ENDIF -->
+
+}
+filesConfig.{UPLOAD_ID} = {
+    source: '{UPLOAD_SOURCE}',
+    item:   {UPLOAD_ITEM},
+    field:  '{UPLOAD_FIELD}',
+    limit:  {UPLOAD_LIMIT},
+    chunk:  {UPLOAD_CHUNK},
+    param:  '{UPLOAD_PARAM}'
+};
 </script>
 <!-- The XDomainRequest Transport is included for cross-domain file deletion for IE 8 and IE 9 -->
 <!--[if (gte IE 8)&(lt IE 10)]>

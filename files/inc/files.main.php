@@ -1,15 +1,19 @@
 <?php
+
+use cot\modules\files\models\File;
+
 defined('COT_CODE') or die('Wrong URL.');
 
 /**
  * Main PFS Controller class for the Files module
  *
- *  Вывод папок и файлов пользователя
+ * Вывод публичных папок и файлов пользователя
  * 
  * @package Files
  * @subpackage pfs
  * @author Cotonti Team
- * @copyright (c) Cotonti Team 2008-2014
+ * @author Kalnov Alexey    <kalnovalexey@yandex.ru>
+ * @todo Пока не используем этот контроллер
  */
 class MainController
 {
@@ -17,15 +21,17 @@ class MainController
      * файлы пользователя
      * @param string $type
      * @return string
+     * @todo Тут выводим только публичные файлы/альбомы пользователей
      */
-    public function indexAction($type = 'all'){
+    public function indexAction($type = 'all')
+    {
         global $usr, $Ls, $db_files, $db_files_folders, $cot_modules;
 
         $perPage = Cot::$cfg['files']['maxFoldersPerPage'];
 
-        list($pgf, $df) = cot_import_pagenav('df', $perPage);   // page number folders
+        [$pgf, $df] = cot_import_pagenav('df', $perPage);   // page number folders
 
-        list($usr['auth_read'], $usr['auth_write'], $usr['isadmin']) = cot_auth('files', 'a');
+        [$usr['auth_read'], $usr['auth_write'], $usr['isadmin']] = cot_auth('files', 'a');
         cot_block($usr['auth_read']);
 
         $f = cot_import('f', 'G', 'INT');     // folder id
@@ -35,6 +41,10 @@ class MainController
 
         $urlParams = array();
         if(!$f && $uid != $usr['id']) $urlParams['uid'] = $uid;
+
+        // @todo Пока не используем этот контроллер
+//        $urlParams = array_merge(['m' => 'pfs'], $urlParams);
+//        cot_redirect(cot_url('files', $urlParams, '', true));
 
         /* === Hook === */
         foreach (cot_getextplugins('files.first') as $pl) {
@@ -48,7 +58,7 @@ class MainController
         $isSFS = false;                        // is Site File Space
 
         if ($f > 0) {
-            $folder = files_model_Folder::getById($f);
+            $folder = files_models_Folder::getById($f);
             if(!$folder) cot_die_message(404);
             $uid = (int)$folder->user_id;
 
@@ -70,9 +80,9 @@ class MainController
             if (!$usr['isadmin'] && $uid != $usr['id']) {
                 $foldersCond[] = array('ff_public', 1);
             }
-            $folders = files_model_Folder::findByCondition($foldersCond, $perPage, $df, array(array('ff_title', 'ASC')));
-            $folders_count = files_model_Folder::count($foldersCond);
-            $onPageFoldersCount = count($folders);
+            $folders = files_models_Folder::findByCondition($foldersCond, $perPage, $df, array(array('ff_title', 'ASC')));
+            $folders_count = files_models_Folder::count($foldersCond);
+            $onPageFoldersCount = !empty($folders) ? count($folders) : 0;
         }
 
         if ($uid === 0) {
@@ -143,19 +153,23 @@ class MainController
 
         $source = $isSFS ? 'sfs' : 'pfs';
 
-        $filesCond = array(
-            array('file_source', $source),
-            array('file_item', $f),
-        );
-        if($type == 'image') $filesCond[] = array('file_img', 1);
+        $filesCond = [
+            ['source', $source],
+            ['source_id', $f],
+        ];
+        if ($type == 'image') {
+            $filesCond[] = ['is_img', 1];
+        }
 
-        if($f == 0){
-            if(!$isSFS) $filesCond[] = array('user_id', $uid);
-            $files_count = intval(files_model_File::count($filesCond));
-        }else{
+        if ($f == 0) {
+            if (!$isSFS) {
+                $filesCond[] = ['user_id', $uid];
+            }
+            $files_count = (int) File::count($filesCond);
+        } else {
             $files_count = $folder->ff_count;
         }
-        $files = files_model_File::findByCondition($filesCond, 0, 0, 'file_order ASC');
+        $files = File::findByCondition($filesCond, 0, 0, 'sort_order ASC');
 
         // Права на редактирование
         $canEdit = 0;
@@ -201,50 +215,52 @@ class MainController
         }
 
         // Если мы находимся в корне, то можем работать с папками
-        if($f == 0){
-            if($folders){
-
-                $folderIds = array();
-                $onPageFoldersFilesCount = 0;
+        if ($f == 0) {
+            $foldersFilesCount = 0;
+            $onPageFoldersFilesCount = 0;
+            if ($folders) {
+                $folderIds = [];
                 foreach($folders as $folderRow){
                     $folderIds[] = $folderRow->ff_id;
                 }
 
-                $sql = Cot::$db->query("SELECT file_item as ff_id, COUNT(*) as items_count, SUM(file_size) as size
-                    FROM $db_files WHERE file_source='{$source}' AND file_item IN (".implode(',', $folderIds).")
-                    GROUP BY file_item");
-                while ($pfs_filesinfo = $sql->fetch()){
-                    $ff_filessize[$pfs_filesinfo['ff_id']]  = $pfs_filesinfo['size'];
+                $sql = Cot::$db->query("SELECT source_id as ff_id, COUNT(*) as items_count, SUM(size) as size
+                    FROM $db_files WHERE source = '{$source}' AND source_id IN (" . implode(',', $folderIds) . ")
+                    GROUP BY source_id");
+                while ($pfs_filesinfo = $sql->fetch()) {
+                    $ff_filessize[$pfs_filesinfo['ff_id']] = $pfs_filesinfo['size'];
                     $onPageFoldersFilesCount += $pfs_filesinfo['items_count'];
                 }
 
-                $sql = Cot::$db->query("SELECT SUM(ff_count) as files_count FROM $db_files_folders WHERE user_id=?", $uid);
+                $sql = Cot::$db->query("SELECT SUM(ff_count) as files_count FROM $db_files_folders WHERE user_id = ?", $uid);
                 $foldersFilesCount = $sql->fetchColumn();
 
                 $fLimit = 3;
                 if($type == 'image') $fLimit = 6;
                 $i = 1;
                 foreach($folders as $folderRow){
-                    $t->assign(files_model_Folder::generateTags($folderRow, 'FOLDER_ROW_', $urlParams));
+                    $t->assign(files_models_Folder::generateTags($folderRow, 'FOLDER_ROW_', $urlParams));
                     $t->assign(array(
                         'FOLDER_ROW_NUM' => $i,
-                        'FOLDER_ROW_ITEMS_SIZE' => cot_build_filesize((int)$ff_filessize[$folderRow->ff_id]),
-                        'FOLDER_ROW_ITEMS_SIZE_RAW' => (int)$ff_filessize[$folderRow->ff_id],
+                        'FOLDER_ROW_ITEMS_SIZE' => cot_build_filesize((int) $ff_filessize[$folderRow->ff_id]),
+                        'FOLDER_ROW_ITEMS_SIZE_RAW' => (int) $ff_filessize[$folderRow->ff_id],
                     ));
 
-                    $filesRowCond = array(
-                        array('file_source', $source),
-                        array('file_item', $folderRow->ff_id),
-                    );
-                    if($type == 'image') $filesRowCond[] = array('file_img', 1);
-                    $folderFiles = files_model_File::findByCondition($filesRowCond, $fLimit, 0, 'file_order ASC');
-                    if($folderFiles){
+                    $filesRowCond = [
+                        ['source', $source],
+                        ['source_id', $folderRow->ff_id],
+                    ];
+                    if ($type == 'image') {
+                        $filesRowCond[] = ['is_img', 1];
+                    }
+                    $folderFiles = File::findByCondition($filesRowCond, $fLimit, 0, 'sort_order ASC');
+                    if ($folderFiles) {
                         $jj = 0;
-                        foreach($folderFiles as $fileRow){
-                            $t->assign(files_model_File::generateTags($fileRow, 'FILES_ROW_'));
-                            $t->assign(array(
-                                'FILES_ROW_NUM'      => $jj,
-                            ));
+                        foreach ($folderFiles as $fileRow) {
+                            $t->assign(File::generateTags($fileRow, 'FILES_ROW_'));
+                            $t->assign([
+                                'FILES_ROW_NUM' => $jj,
+                            ]);
                             $t->parse('MAIN.FOLDERS.ROW.FILES_ROW');
                             $jj++;
                         }
@@ -256,8 +272,8 @@ class MainController
                 $t->parse('MAIN.FOLDERS.EMPTY');
             }
 
-            if($usr['auth_write']){
-                if(($isSFS && $usr['isadmin']) || ($uid == $usr['id'])){
+            if ($usr['auth_write']) {
+                if (($isSFS && $usr['isadmin']) || ($uid == $usr['id'])) {
                     $formHidden = cot_inputbox('hidden', 'uid', $uid).cot_inputbox('hidden', 'act', 'save');
                     $formAlbum = cot_checkbox(true, 'ff_album',  Cot::$L['files_isgallery']);
                     if($type == 'image'){
@@ -305,7 +321,7 @@ class MainController
         }
 
         if($folder){
-            $t->assign(files_model_Folder::generateTags($folder, 'FOLDER_', $urlParams));
+            $t->assign(files_models_Folder::generateTags($folder, 'FOLDER_', $urlParams));
         }else{
             $t->assign(array(
                 'FOLDER_ID' => 0,
@@ -313,10 +329,10 @@ class MainController
         }
 
 
-        if($files){
+        if ($files) {
             $jj = 0;
-            foreach($files as $fileRow){
-                $t->assign(files_model_File::generateTags($fileRow, 'FILES_ROW_'));
+            foreach($files as $fileRow) {
+                $t->assign(File::generateTags($fileRow, 'FILES_ROW_'));
                 $t->assign(array(
                     'FILES_ROW_NUM'      => $jj,
                 ));
