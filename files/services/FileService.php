@@ -17,13 +17,28 @@ use League\MimeTypeDetection\GeneratedExtensionToMimeTypeMap;
 use Throwable;
 
 /**
+ * Files service
  * @package Files
- *
- * @todo при загрузке файлов проверять временную директорию и удалять фалы старше 2-х дней? \cot_filesTempDir()
- * c:/ospanel/userdata/temp\files_bd4fd02e3abc35abf77622_upload/
+ * @author Alexey Kalnov <kalnovalexey@yandex.ru> https://github.com/Alex300
+ * @copyright (c) 2014-2025 Lily Software https://lily-software.com
  */
 class FileService
 {
+    private static $classInstances = [];
+
+    /**
+     * @return static
+     * @todo use system GetInstanceTrait after 0.9.26 release
+     */
+    public static function getInstance(): self
+    {
+        $class = static::class;
+        if (!isset(self::$classInstances[$class])) {
+            self::$classInstances[$class] = new static();
+        }
+        return self::$classInstances[$class];
+    }
+
     public const FILE_UPLOAD_ERRORS = [
         UPLOAD_ERR_OK => 'There is no error, the file uploaded with success',
         UPLOAD_ERR_INI_SIZE => 'The uploaded file exceeds the upload_max_filesize directive in php.ini',
@@ -94,6 +109,23 @@ class FileService
         'odt' => 'application/vnd.oasis.opendocument.text',
         'ods' => 'application/vnd.oasis.opendocument.spreadsheet',
     ];
+
+    public function getAllowedExtensions(): array
+    {
+        $extensions = str_replace(' ', '', Cot::$cfg['files']['exts']);
+        if ($extensions === '') {
+            return [];
+        }
+        $result = explode(',', Cot::$cfg['files']['exts']);
+        foreach ($result as $key => $item) {
+            $item = trim($item);
+            if ($item === '') {
+                unset($result[$key]);
+            }
+        }
+
+        return array_unique($result);
+    }
 
     /**
      * Configuration example
@@ -313,9 +345,9 @@ class FileService
             }
         }
 
-        // Convert to JPEG
-        if (FileService::isNeedToConvertToJpeg($file->fileName)) {
-            $file->ext = 'jpg';
+        // Convert image
+        if (FileService::isNeedToConvert($file->fileName)) {
+            $file->ext = Cot::$cfg['files']['image_convert'];
             $file->fileName = pathinfo($file->fileName, PATHINFO_FILENAME) . '.' . $file->ext;
             $file->originalName = pathinfo($file->originalName, PATHINFO_FILENAME) . '.' . $file->ext;
             $imageChanged = true;
@@ -323,10 +355,10 @@ class FileService
 
         if ($imageChanged) {
             try {
-                $image->save($file->getFullName(), (int) \Cot::$cfg['files']['quality']);
-            } catch (\Exception $e) {
+                $image->save($file->getFullName(), (int) Cot::$cfg['files']['quality']);
+            } catch (Throwable $e) {
                 $message = "Can't save image '" . $file->getFullName() . "'";
-                if (\Cot::$usr['isadmin']) {
+                if (Cot::$usr['isadmin']) {
                     $msg = $e->getMessage();
                     if (!empty($msg)) {
                         $message .= ': ' . $msg;
@@ -351,30 +383,34 @@ class FileService
      * @param string $fileName
      * @return bool
      */
-    public static function isNeedToConvertToJpeg($fileName)
+    public static function isNeedToConvert($fileName)
     {
-        if (!\Cot::$cfg['files']['image_convert']) {
+        if (empty(Cot::$cfg['files']['image_convert']) || Cot::$cfg['files']['image_convert'] === 'no') {
             return false;
         }
 
-        $toConvert = [];
-        if (!empty(\Cot::$cfg['files']['image_to_convert'])) {
-            $tmp = str_replace([' ', '.'], '', \Cot::$cfg['files']['image_to_convert']);
+        $convertFromTypes = [];
+        if (!empty(Cot::$cfg['files']['image_to_convert'])) {
+            $tmp = str_replace([' ', '.'], '', Cot::$cfg['files']['image_to_convert']);
             $tmp = explode(',', $tmp);
             if (!empty($tmp)) {
                 foreach ($tmp as $ext) {
                     $ext = trim($ext);
                     if (!empty($ext)) {
-                        $toConvert[] =  mb_strtolower($ext);
+                        $convertFromTypes[] =  mb_strtolower($ext);
                     }
                 }
             }
         }
 
+        $convertToType = Cot::$cfg['files']['image_convert'] === 'jpg'
+            ? ['jpg', 'jpeg']
+            : [Cot::$cfg['files']['image_convert']];
+
         $ext = cot_filesGetExtension($fileName);
         if (
-            (empty($toConvert) && !in_array($ext, ['jpg', 'jpeg']))
-            || !empty($toConvert) && in_array($ext, $toConvert)
+            !in_array($ext, $convertToType)
+            && (empty($convertFromTypes) || in_array($ext, $convertFromTypes))
         ) {
             return true;
         }
@@ -403,7 +439,7 @@ class FileService
         }
 
         if (in_array($ext, ['avif','bmp','gif','jpg','jpeg','heic','png','tga','tpic','wbmp','webp','xbm'])) {
-            return \Cot::$cfg['modules_dir'] . "/files/img/types/$size/image.png";
+            return Cot::$cfg['modules_dir'] . "/files/img/types/$size/image.png";
         }
 
         if (!empty($mimeType)) {

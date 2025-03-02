@@ -5,10 +5,10 @@ Code=files
 Name=Files
 Description=Personal File Space and attach files to posts and pages
 Category=files-media
-Version=2.0.0
-Date=2023-10-21
-Author=Cotonti Team, Kalnov Alexey https://github.com/Alex300
-Copyright=(c) Cotonti Team, 2014-2023 Lily Software https://lily-software.com
+Version=2.1.0
+Date=2025-02-10
+Author=Alexey Kalnov https://github.com/Alex300
+Copyright=(c) 2014-2025 Lily Software https://lily-software.com
 Notes=DO NOT FORGET to create a writable folder for the files
 Auth_guests=R
 Lock_guests=12345A
@@ -22,6 +22,7 @@ prefix=02:string::file-:File prefix
 checkAllowedType=03:radio::1:
 exts=04:text::avif,bmp,gif,jpg,jpeg,heic,heif,png,tga,tpic,wbmp,webp,xbm,zip,rar,7z,gz,bz2,pdf,djvu,mp3,ogg,wma,avi,divx,mpg,mpeg,swf,txt,doc,docx,xls,xlsx:Allowed extensions (comma separated, no dots and spaces)
 fixExtensionsByMime=05:radio::1:Fix files extensions by mime type
+loadAssetsGlobally=06:radio::0:
 maxFoldersPerPage=07:string::15:
 pfs_winclose=08:radio::0:
 
@@ -33,7 +34,7 @@ chunkSize=13:string::2000000:Chunk size (in bytes) (0 - Disable chunked file upl
 
 img_separator=20:separator:::
 
-image_convert=21:radio::1:Convert images to JPG on upload
+image_convert=21:select:jpg,png,webp,no:jpg:Convert images
 image_to_convert=22:text::avif,bmp,heic,heif,tga,tpic,wbmp,xbm:Image extensions/types to convert to jpeg, if the option above is enabled. If empty, all images will be converted. (comma separated, no dots and spaces)
 image_resize=23:radio::0:Resize uploading images
 image_maxwidth=24:string::3840:Image max width for resize
@@ -67,12 +68,12 @@ avatar_framing=53:select:height,width,inset,outbound:outbound:Default avatar fra
  * @todo test extrafields
  * @todo min PHP version 7.4
  *
- * module Files for Cotonti Siena
+ * Files module for Cotonti Siena
  *
  * @package Files
  *
- * @author Kalnov Alexey <kalnovalexey@yandex.ru>
- * @copyright (c) 2014-2023 Lily Software https://lily-software.com (ex. Portal30 Studio)
+ * @author Alexey Kalnov <kalnovalexey@yandex.ru>
+ * @copyright (c) 2014-2025 Lily Software https://lily-software.com
  *
  * В настройках все размеры указываются в байтах
  * в ограничениях 0 - не ограничено, -1 - запрещено

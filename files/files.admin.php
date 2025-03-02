@@ -18,16 +18,16 @@ Hooks=admin
  */
 (defined('COT_CODE') && defined('COT_ADMIN')) or die('Wrong URL.');
 
-list(\Cot::$usr['auth_read'], \Cot::$usr['auth_write'], \Cot::$usr['isadmin']) = cot_auth('files', 'a');
-cot_block(\Cot::$usr['isadmin']);
+list(Cot::$usr['auth_read'], Cot::$usr['auth_write'], Cot::$usr['isadmin']) = cot_auth('files', 'a');
+cot_block(Cot::$usr['isadmin']);
 
 // Self requirements
 require_once cot_incfile('files', 'module');
 
-$adminpath[] = [cot_url('admin', ['m' => 'extensions']), \Cot::$L['Extensions']];
-$adminpath[] = array(cot_url('admin', ['m' => 'extensions', 'a' => 'details', 'mod' => $m]), $cot_modules[$m]['title']);
-$adminpath[] = [cot_url('admin', ['m' => $m]), \Cot::$L['Administration']];
-$adminhelp = '';
+$adminPath[] = [cot_url('admin', ['m' => 'extensions']), Cot::$L['Extensions']];
+$adminPath[] = [cot_url('admin', ['m' => 'extensions', 'a' => 'details', 'mod' => $m]), $cot_modules[$m]['title']];
+$adminPath[] = [cot_url('admin', ['m' => $m]), Cot::$L['Administration']];
+$adminHelp = '';
 
 
 // TODO кеширование
@@ -72,9 +72,9 @@ if (!$actionExists) {
 
 if (COT_AJAX && $_SERVER['REQUEST_METHOD'] == 'POST') {
     // Не использовать эту фичу, если $_SERVER["REQUEST_METHOD"] == 'GET' т.к. это поломает ajax пагинацию
-    require_once \Cot::$cfg['system_dir'] . '/header.php';
+    require_once Cot::$cfg['system_dir'] . '/header.php';
     echo $content;
-    require_once \Cot::$cfg['system_dir'] . '/footer.php';
+    require_once Cot::$cfg['system_dir'] . '/footer.php';
     exit;
 }
 
@@ -84,4 +84,4 @@ $t->assign('CONTENT', $content);
 cot_display_messages($t);
 
 $t->parse('MAIN');    
-$adminmain = $t->text('MAIN');
+$adminMain = $t->text('MAIN');

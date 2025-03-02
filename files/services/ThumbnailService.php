@@ -6,10 +6,10 @@ namespace cot\modules\files\services;
 
 use Cot;
 use cot\modules\files\models\File;
-use filesystem\FilesystemFactory;
 use filesystem\LocalFilesystem;
 use image\Image;
 use League\Flysystem\Filesystem;
+use Throwable;
 
 class ThumbnailService
 {
@@ -29,7 +29,7 @@ class ThumbnailService
      */
     public static function fileThumbnailDirectory(int $id, bool $relative = false): string
     {
-        $hash = mb_substr(md5($id . \Cot::$cfg['site_id']), 0, 20);
+        $hash = mb_substr(md5($id . Cot::$cfg['site_id']), 0, 20);
         return static::thumbnailDirectory($relative) . '/' . $id . 'a' . $hash;
     }
 
@@ -52,8 +52,8 @@ class ThumbnailService
         $width = str_replace('%', 'p', (string) $width);
         $height = str_replace('%', 'p', (string) $height);
 
-        $hash = mb_substr(md5($id . \Cot::$cfg['files']['prefix'] . \Cot::$cfg['site_id'] . $width . $height . $frame), 0, 20);
-        return static::fileThumbnailDirectory($id, $relative) . '/' . \Cot::$cfg['files']['prefix'] . $hash . '-' . $width . 'x' . $height
+        $hash = mb_substr(md5($id . Cot::$cfg['files']['prefix'] . Cot::$cfg['site_id'] . $width . $height . $frame), 0, 20);
+        return static::fileThumbnailDirectory($id, $relative) . '/' . Cot::$cfg['files']['prefix'] . $hash . '-' . $width . 'x' . $height
             . '-' . $frame . '.' . $extension;
     }
 
@@ -67,7 +67,6 @@ class ThumbnailService
      * @param string $localFileFullPath The full path to the local file. If passed, this file will be used to generate a thumbnail
      * @return array{path: string, url: string, fileSystem: LocalFilesystem|Filesystem}|null Thumbnail path and url on success or null on error
      *
-     * @todo Проверка на конвертирование в JPEG. Если файл подлежит конвертированию, то миниатюра должна быть в JPEG.
      * @todo можно вообще кешировать. Но тут вопрос, как зачищать кеш? Например при удалении всех миниатюр...
      */
     public static function thumbnail(
@@ -144,13 +143,19 @@ class ThumbnailService
         } else {
             $thumbnailFileSystem = FileService::getFilesystemByName($fileSystemName);
         }
-        $thumbRelativePath = ThumbnailService::thumbnailPath($id, $width, $height, $frame, $file->ext, true);
+
+        $thumbExtension = $file->ext;
+        if (FileService::isNeedToConvert($file->file_name)) {
+            $thumbExtension = Cot::$cfg['files']['image_convert'];
+        }
+
+        $thumbRelativePath = ThumbnailService::thumbnailPath($id, $width, $height, $frame, $thumbExtension, true);
 
         if (!($thumbnailFileSystem instanceof LocalFilesystem)) {
             if ($thumbnailFileSystem->fileExists($thumbRelativePath)) {
                 try {
                     $thumbnailUrl = $thumbnailFileSystem->publicUrl($thumbRelativePath);
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $thumbnailUrl = '';
                 }
                 return [
@@ -186,20 +191,20 @@ class ThumbnailService
                 $image = Image::load($resource);
                 fclose($resource);
             }
-            $image->thumbnail($width, $height, $frame, (bool) \Cot::$cfg['files']['upscale']);
-        } catch (\Throwable $e) {
+            $image->thumbnail($width, $height, $frame, (bool) Cot::$cfg['files']['upscale']);
+        } catch (Throwable $e) {
             return null;
         }
 
         // Watermark
         if (
             $watermark
-            && !empty(\Cot::$cfg['files']['thumb_watermark'])
-            && is_readable(\Cot::$cfg['files']['thumb_watermark'])
-            && $image->getWidth() >= \Cot::$cfg['files']['thumb_wm_widht']
-            && $image->getHeight() >= \Cot::$cfg['files']['thumb_wm_height']
+            && !empty(Cot::$cfg['files']['thumb_watermark'])
+            && is_readable(Cot::$cfg['files']['thumb_watermark'])
+            && $image->getWidth() >= Cot::$cfg['files']['thumb_wm_widht']
+            && $image->getHeight() >= Cot::$cfg['files']['thumb_wm_height']
         ) {
-            $watermarkImage = Image::load(\Cot::$cfg['files']['thumb_watermark']);
+            $watermarkImage = Image::load(Cot::$cfg['files']['thumb_watermark']);
             $imageWidth = $image->getWidth();
             $imageHeight = $image->getHeight();
             $wmWidth = $watermarkImage->getWidth();
@@ -217,16 +222,19 @@ class ThumbnailService
         $saveToRemote = !($thumbnailFileSystem instanceof LocalFilesystem);
         try {
             if ($saveToRemote) {
-                $thumbnailFileSystem->write($thumbRelativePath, $image->encode($file->ext, (int) Cot::$cfg['files']['quality']));
+                $thumbnailFileSystem->write(
+                    $thumbRelativePath,
+                    $image->encode($thumbExtension, (int) Cot::$cfg['files']['quality'])
+                );
             } else {
                 $thumbRelativeDir = dirname($thumbRelativePath);
                 if (!$thumbnailFileSystem->directoryExists($thumbRelativeDir)) {
                     $thumbnailFileSystem->createDirectory($thumbRelativeDir);
                 }
-                $thumbPath = ThumbnailService::thumbnailPath($id, $width, $height, $frame, $file->ext, false);
+                $thumbPath = ThumbnailService::thumbnailPath($id, $width, $height, $frame, $thumbExtension, false);
                 $image->save($thumbPath, (int) Cot::$cfg['files']['quality']);
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             unset($image);
             return null;
         }

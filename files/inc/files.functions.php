@@ -7,9 +7,11 @@
  * @author Kalnov Alexey <kalnovalexey@yandex.ru>
  */
 
+use cot\modules\files\inc\FilesAssets;
 use cot\modules\files\models\File;
 use cot\modules\files\services\FileService;
 use cot\modules\files\services\ThumbnailService;
+use filesystem\exceptions\UnableToRetrieveMetadata;
 use filesystem\LocalFilesystem;
 use image\Image;
 use League\MimeTypeDetection\ExtensionMimeTypeDetector;
@@ -46,10 +48,10 @@ cot_extrafields_register_table('files_folders');
  */
 function cot_filesCount($source, $sourceId, $sourceField = '', $type = 'all')
 {
-    static $a_cache = [];
+    static $countCache = [];
 
     $cacheField = ($sourceField != '') ? $sourceField : '_empty_field_name_';
-    if (!isset($a_cache[$source][$sourceId][$cacheField][$type])) {
+    if (!isset($countCache[$source][$sourceId][$cacheField][$type])) {
         $cond = [
             ['source', $source],
             ['source_id', $sourceId],
@@ -73,9 +75,9 @@ function cot_filesCount($source, $sourceId, $sourceField = '', $type = 'all')
             $cond[] = ['source_field', $sourceField];
         }
 
-        $a_cache[$source][$sourceId][$cacheField][$type] = File::count($cond);
+        $countCache[$source][$sourceId][$cacheField][$type] = File::count($cond);
     }
-    return $a_cache[$source][$sourceId][$cacheField][$type];
+    return $countCache[$source][$sourceId][$cacheField][$type];
 }
 
 /**
@@ -84,15 +86,17 @@ function cot_filesCount($source, $sourceId, $sourceField = '', $type = 'all')
  * @param int $sourceId Target item id.
  * @param string $sourceField Target item field
  * @param string $column Empty string to return full row, one of the following to return a single value: 'id',
- *                              'user_id', 'path', 'file_name', 'original_name', 'ext', 'is_img', 'size', 'title', 'downloads_count'
- * @param string $number Attachment number within item, or one of these values: 'first', 'rand' or 'last'. Defines which image is selected.
+ *    'user_id', 'path', 'file_name', 'original_name', 'ext', 'is_img', 'size', 'title', 'downloads_count'
+ * @param string $number Attachment number within item, or one of these values: 'first', 'rand' or 'last'.
+ *    Defines which image is selected.
  * @return File|int|string|null Scalar column value, File object or NULL if no attachments found.
  */
 function cot_filesGet($source, $sourceId, $sourceField = '', $column = '', $number = 'first')
 {
-    static $a_cache;
+    static $fileCache;
 
-    if (!isset($a_cache[$source][$sourceId][$number])) {
+    $cacheField = !empty($sourceField) ? $sourceField : '_empty_field_name_';
+    if (!isset($fileCache[$source][$sourceId][$cacheField][$number])) {
         $order_by = $number == 'rand' ? 'RAND()' : 'sort_order';
         if ($number == 'last') {
             $order_by .= ' DESC';
@@ -104,18 +108,26 @@ function cot_filesGet($source, $sourceId, $sourceField = '', $column = '', $numb
             ['source_id', $sourceId],
         ];
 
-        if ($sourceField != '_all_') {
+        if ($sourceField !== '_all_') {
             $cond[] = ['source_field', $sourceField];
         }
+
         $file = File::findByCondition($cond, 1, $offset, $order_by);
         if (!$file) {
-            return null;
+            $fileCache[$source][$sourceId][$cacheField][$number] = false;
+        } else {
+            $fileCache[$source][$sourceId][$cacheField][$number] = current($file);
         }
-        $a_cache[$source][$sourceId][$number] = current($file);
 
     }
 
-    return empty($column) ? $a_cache[$source][$sourceId][$number] : $a_cache[$source][$sourceId][$number]->{$column};
+    if ($fileCache[$source][$sourceId][$cacheField][$number] === false) {
+        return null;
+    }
+
+    return empty($column)
+        ? $fileCache[$source][$sourceId][$cacheField][$number]
+        : $fileCache[$source][$sourceId][$cacheField][$number]->{$column};
 }
 
 /**
@@ -418,8 +430,14 @@ function cot_filesThumbnailUrl($id, $width = 0, $height = 0, string $frame = '',
 
     if ($addLastMod) {
         // FancyBox does not work this way
-        return $thumbnail['url'] . '?lm=' . ($lastModified ?? $thumbnail['fileSystem']->lastModified($thumbnail['path']));
+        try {
+            return $thumbnail['url'] . '?lm='
+                . ($lastModified ?? $thumbnail['fileSystem']->lastModified($thumbnail['path']));
+        } catch (UnableToRetrieveMetadata $e) {
+            // Для только что созданных файлов может быть ошибка получения данных
+        }
     }
+
     return $thumbnail['url'];
 }
 
@@ -572,7 +590,6 @@ function cot_delete_user_files($userId)
  * @param string $tpl Template code
  * @return string
  *
- * @todo no cache parameter for css
  * @todo generate formUnikey
  */
 function cot_filesAvatarBox($userId = null, $tpl = 'files.avatarbox')
@@ -597,41 +614,9 @@ function cot_filesAvatarBox($userId = null, $tpl = 'files.avatarbox')
         }
     }
 
-    $jsFunc = (!defined('COT_HEADER_COMPLETE')) ? 'linkFile': 'linkFileFooter';
-    $nc = $cot_modules['files']["version"];
-
-    // Подключаем jQuery-templates только один раз
-//    static $jQtemlatesOut = false;
-//    $jQtemlates = '';
-    $modUrl = Cot::$cfg['modules_dir'] . '/files';
-
-    // CSS to style the file input field as button and adjust the Bootstrap progress bars
-    Resources::$jsFunc($modUrl . '/lib/upload/css/jquery.fileupload.css');
-    Resources::$jsFunc($modUrl . '/lib/upload/css/jquery.fileupload-ui.css');
-
-    /* === Java Scripts === */
-    // The jQuery UI widget factory, can be omitted if jQuery UI is already included
-    Resources::linkFileFooter($modUrl . '/lib/upload/js/vendor/jquery.ui.widget.js?nc=' . $nc, 'js');
-    Resources::linkFileFooter($modUrl . '/lib/upload/js/jquery.iframe-transport.js?nc=' . $nc);
-
-    if (Cot::$cfg['files']['image_resize'] && Cot::$cfg['files']['image_maxwidth'] > 0 && Cot::$cfg['files']['image_maxheight'] > 0) {
-        // The Load Image plugin is included for the preview images and image resizing functionality
-        Resources::linkFileFooter($modUrl . '/lib/JavaScript-Load-Image/js/load-image.all.min.js?nc=' . $nc);
+    if (!Cot::$cfg['files']['loadAssetsGlobally']) {
+        FilesAssets::getInstance()->load();
     }
-
-    // The basic File Upload plugin
-    Resources::linkFileFooter($modUrl . '/lib/upload/js/jquery.fileupload.js?nc=' . $nc);
-
-    // The File Upload file processing plugin
-    Resources::linkFileFooter($modUrl . '/lib/upload/js/jquery.fileupload-process.js?nc='.$nc);
-
-    if (Cot::$cfg['files']['image_resize'] && Cot::$cfg['files']['image_maxwidth'] > 0 && Cot::$cfg['files']['image_maxheight'] > 0) {
-        // The File Upload image preview & resize plugin
-        Resources::linkFileFooter($modUrl . '/lib/upload/js/jquery.fileupload-image.js?nc=' . $nc);
-    }
-
-    // The File Upload validation plugin
-    Resources::linkFileFooter($modUrl . '/lib/upload/js/jquery.fileupload-validate.js?nc='.$nc);
 
     $formId = "{$source}_{$item}_{$filed}";
     $type = ['image'];
@@ -665,9 +650,12 @@ function cot_filesAvatarBox($userId = null, $tpl = 'files.avatarbox')
         $action .= '&uid='.$uid;
     }
 
+    $avatarTemplate = str_replace(['{$', '}'], '__', Cot::$R['files_user_avatar']);
+
     // Metadata
     $t->assign([
         'AVATAR'         => $avatar,
+        'AVATAR_TEMPLATE' => base64_encode($avatarTemplate),
         'UPLOAD_ID'      => $formId,
         'UPLOAD_SOURCE'  => $source,
         'UPLOAD_ITEM'    => $item,
@@ -675,10 +663,7 @@ function cot_filesAvatarBox($userId = null, $tpl = 'files.avatarbox')
         'UPLOAD_LIMIT'   => $limits['count_max'],
         'UPLOAD_TYPE'    => $type,
         'UPLOAD_PARAM'   => $params,
-        'UPLOAD_CHUNK'   => (int) Cot::$cfg['files']['chunkSize'],
-        'UPLOAD_EXTS'    => preg_replace('#[^a-zA-Z0-9,]#', '', Cot::$cfg['files']['exts']),
-//        'UPLOAD_ACCEPT'  => preg_replace('#[^a-zA-Z0-9,*/-]#', '',Cot::$cfg['plugin']['attach2']['accept']),
-        'UPLOAD_MAXSIZE' => $limits['size_maxfile'],
+        'UPLOAD_MAXSIZE' => $limits['size_maxfile'], // @todo Is it needed?
         'UPLOAD_ACTION'  => $action,
         'UPLOAD_X'       => Cot::$sys['xk'],
     ]);
@@ -866,7 +851,6 @@ function cot_filesDownloads(string $source, $item, string $field = '', string $t
  * @param ?int $userId for admins only
  * @return string
  *
- * @todo no cache parameter for css
  * @todo generate formUnikey
  */
 function cot_filesFileBox(
@@ -895,81 +879,21 @@ function cot_filesFileBox(
         }
     }
 
-    $nc = $cot_modules['files']['version'];
-
     // Подключаем jQuery-templates только один раз
     static $jQtemplatesOut = false;
     $jQtemplates = '';
     if (!$jQtemplatesOut) {
         $templates = new XTemplate(cot_tplfile('files.templates', 'module'));
-        $templates->assign(array(
+        $templates->assign([
             'IS_STANDALONE' => ($standalone == 1) ? 1 : 0,
-        ));
+        ]);
         $templates->parse();
         $jQtemplates = $templates->text();
         $jQtemplatesOut = true;
 
-        $modUrl = Cot::$cfg['modules_dir'] . '/files';
-
-        // Generic page styles
-        Resources::linkFile($modUrl.'/tpl/filebox.css');
-
-        // Bootstrap Image Gallery styles
-        //$jsFunc($cfg['plugins_dir'].'/attach2/lib/Gallery/css/blueimp-gallery.min.css');
-
-        // CSS to style the file input field as button and adjust the Bootstrap progress bars
-        Resources::linkFile($modUrl.'/lib/upload/css/jquery.fileupload.css');
-        Resources::linkFile($modUrl.'/lib/upload/css/jquery.fileupload-ui.css');
-
-        /* === Java Scripts === */
-        // The jQuery UI widget factory, can be omitted if jQuery UI is already included
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/vendor/jquery.ui.widget.js?nc='.$nc);
-
-        // The Templates plugin is included to render the upload/download listings
-        Resources::linkFileFooter($modUrl.'/lib/JavaScript-Templates/tmpl.min.js?nc='.$nc);
-
-        // The Load Image plugin is included for the preview images and image resizing functionality
-        Resources::linkFileFooter($modUrl.'/lib/JavaScript-Load-Image/js/load-image.all.min.js?nc='.$nc);
-
-        // The Canvas to Blob plugin is included for image resizing functionality
-        Resources::linkFileFooter($modUrl.'/lib/JavaScript-Canvas-to-Blob/canvas-to-blob.min.js?nc='.$nc);
-
-        // blueimp Gallery script
-        //cot_rc_link_footer($cfg['plugins_dir'].'/attach2/lib/Gallery/js/jquery.blueimp-gallery.min.js');
-
-        // The Iframe Transport is required for browsers without support for XHR file uploads
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.iframe-transport.js?nc='.$nc);
-
-        // The basic File Upload plugin
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.fileupload.js?nc='.$nc);
-
-        // The File Upload file processing plugin
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.fileupload-process.js?nc='.$nc);
-
-        // The File Upload image preview & resize plugin
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.fileupload-image.js?nc='.$nc);
-
-        // The File Upload audio preview plugin
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.fileupload-audio.js?nc='.$nc);
-
-        // The File Upload video preview plugin
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.fileupload-video.js?nc='.$nc);
-
-        // The File Upload validation plugin
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.fileupload-validate.js?nc='.$nc);
-
-        // The File Upload user interface plugin
-        Resources::linkFileFooter($modUrl.'/lib/upload/js/jquery.fileupload-ui.js?nc='.$nc);
-
-        //    // The localization script
-        //    cot_rc_link_footer($cfg['plugins_dir'].'/attach2/lib/upload/js/locale.js');
-
-
-        // The main application script
-        Resources::linkFileFooter($modUrl.'/js/files.js?nc='.$nc);
-
-        // Table Drag&Drop plugin for reordering
-        Resources::linkFileFooter('js/jquery.tablednd.min.js?nc='.$nc);
+        if (!Cot::$cfg['files']['loadAssetsGlobally']) {
+            FilesAssets::getInstance()->load();
+        }
     }
 
     $formId = "{$source}_{$item}_{$name}";
@@ -1000,14 +924,18 @@ function cot_filesFileBox(
 
     $action = 'index.php?e=files&m=upload&source=' . $source . '&item=' . $item;
     if (!empty($name)) {
-        $action .= '&field='.$name;
+        $action .= '&field=' . $name;
     }
+    $action .= '&_ajax=1';
 
     static $unikey = '';
 
     $formUnikey = '';
     if (!in_array($source, ['sfs', 'pfs']) && $item == 0) {
         $unikeyName = "cf_{$source}_{$item}";
+        if (!empty($name)) {
+            $unikeyName .= '_' . $name;
+        }
 
         if (empty($unikey)) {
             $unikey = cot_import($unikeyName, 'P', 'TXT');
@@ -1016,7 +944,7 @@ function cot_filesFileBox(
             }
             $unikey = cot_import_buffered($unikeyName, $unikey);
             if (!$unikey) {
-                $unikey = mb_substr(md5("{$source}_{$item}" . '_' . \Cot::$usr['id'] . rand(0, 99999999)), 0, 15);
+                $unikey = mb_substr(md5("{$source}_{$item}" . '_' . Cot::$usr['id'] . rand(0, 99999999)), 0, 15);
             }
         }
         $params['unikey'] = $unikey;
@@ -1043,13 +971,8 @@ function cot_filesFileBox(
         'UPLOAD_LIMIT' => $limit,
         'UPLOAD_TYPE' => $type,
         'UPLOAD_PARAM' => $params,
-        'UPLOAD_CHUNK' => (int) Cot::$cfg['files']['chunkSize'],
-        'UPLOAD_EXTS' => preg_replace('#[^a-zA-Z0-9,]#', '', Cot::$cfg['files']['exts']),
-//        'UPLOAD_ACCEPT'  => preg_replace('#[^a-zA-Z0-9,*/-]#', '',Cot::$cfg['plugin']['attach2']['accept']),
         'UPLOAD_MAXSIZE' => $limits['size_maxfile'],
         'UPLOAD_ACTION'  => $action,
-        'UPLOAD_THUMB_WIDTH' => (int) Cot::$cfg['files']['thumb_width'],
-        'UPLOAD_THUMB_HEIGHT' => (int) Cot::$cfg['files']['thumb_height'],
         'UPLOAD_X' => Cot::$sys['xk'],
     ]);
 
@@ -1235,18 +1158,6 @@ function cot_filesLoadBootstrap(): string
                 ]
             ) . "\n";
 
-        }
-    }
-
-    $themeAlias = Resources::getAlias('@bootstrapTheme.css');
-    if ($themeAlias) {
-        if (!Resources::isFileAdded('@bootstrapTheme.css')) {
-            $ret .= cot_rc(
-                'code_rc_css_file',
-                [
-                    'url' => Resources::getAlias('@bootstrapTheme.css')
-                ]
-            ) . "\n";
         }
     }
 

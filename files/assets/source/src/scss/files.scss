@@ -1,0 +1,96 @@
+.dropzone {
+    text-align: center;
+    font-weight: bold;
+    padding: 10px;
+    margin-bottom: 5px;
+}
+.dropzone.in {
+    font-size: larger;
+}
+.dropzone.hover { }
+.dropzone.fade {
+    -webkit-transition: all 0.3s ease-out;
+    -moz-transition: all 0.3s ease-out;
+    -ms-transition: all 0.3s ease-out;
+    -o-transition: all 0.3s ease-out;
+    transition: all 0.3s ease-out;
+    opacity: 1;
+}
+
+.file-upload .filesTable p { margin-bottom: 5px; }
+.file-upload .filesTable .form-control { margin-bottom: 10px; }
+.file-upload .filesTable .files-replace-file { margin-bottom: 5px; }
+
+.file-upload {
+    &[data-files-source-id="0"] {
+        .file-id {
+            display: none;
+        }
+        // Do not show "Replace file" for unsaved (new) objects.
+        .files-replace-file {
+            display: none;
+        }
+    }
+}
+
+.fileupload-progress { margin: 10px 10px 0 10px; }
+
+.file-upload .filesTable .files .name {
+    /*width: 80px;*/
+    word-wrap: break-word;
+    max-width: 99%;
+    overflow-x: hidden;
+}
+
+.dropzone .progress{ margin-bottom: 10px; }
+
+.template-download {
+    position: relative;
+}
+
+.file-upload-preloader {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    background: url(../img/loading.gif) center no-repeat;
+    background-size: contain;
+}
+
+.preview img, .preview canvas {
+    max-width: 140px;
+}
+
+.file-upload-avatar {
+    .files-avatar-container {
+        position: relative;
+        width: max-content;
+    }
+}
+
+@media (max-width: 769px) {
+    .files .preview img,
+    .files .preview canvas {
+        max-width: 60px;
+    }
+    .file-upload .filesTable .form-control {
+        max-width: 160px;
+    }
+    .file-upload .filesTable .files .name {
+        max-width: 160px;
+    }
+    .files-replace-file {
+        max-width: 160px;
+    }
+    .dropzone {
+        background: none;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+    }
+    .dropzone .fileupload-progress {
+        margin: 0;
+    }
+}
